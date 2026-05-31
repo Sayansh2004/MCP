@@ -74,6 +74,17 @@ async def delete_note(note_id: str, db: dependency):
     await db.commit()
     return {"message": f"Note with id {note_id} deleted successfully", "success": True, "data": data}
 
+@app.get("/search",status_code=status.HTTP_200_OK,tags=["Agent-Safe"])
+async def search_notes(query:str,db:dependency):
+    notes = await db.execute(select(Note))
+    data = notes.scalars().all()
+    if not data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No notes found")
+    filtered_notes=[note for note in data if query.lower() in note.title.lower() or query.lower() in note.description.lower() or query.lower() in [tag.lower() for tag in note.tags]]
+    if not filtered_notes:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No notes found matching the query '{query}'")
+    return {"message": f"Notes matching the query '{query}' fetched successfully", "success": True, "data": filtered_notes}
+
 
 mcp = FastApiMCP(app, include_tags=["Agent-Safe"], exclude_tags=["Agent-restricted"])
 mcp.mount()
