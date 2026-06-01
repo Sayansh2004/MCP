@@ -21,7 +21,7 @@ client=MultiServerMCPClient(
 agent=None
 
 async def initialise_agent():
-    global agent
+    
     tools=await client.get_tools("knowledge_assistant")
     systemp_prompt="""
     You are a helpful personal assistant that helps users manage their notes by :
@@ -42,4 +42,12 @@ async def initialise_agent():
 
     agent=create_react_agent(llm,tools,prompt=SystemMessage(content=systemp_prompt))
     
-    
+
+async def run_agent(user_input):
+    global agent
+
+    if agent is None:
+        await initialise_agent()
+
+    response=await agent.ainvoke([HumanMessage(content=user_input)])
+    return response.content
