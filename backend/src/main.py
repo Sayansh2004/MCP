@@ -1,14 +1,22 @@
 from fastapi import FastAPI, HTTPException, Depends
 from starlette import status
-from config.models import NoteCreateRequest, NoteEditRequest, Note
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from config.db import get_db
 from sqlalchemy import select
 from typing import Annotated
 from fastapi_mcp import FastApiMCP
+from config.models import NoteCreateRequest, NoteEditRequest, Note
+from config.db import get_db, engine, Base
 
 
 app = FastAPI()
+
+@app.on_event("startup")
+async def create_tables():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
 
 dependency = Annotated[AsyncSession, Depends(get_db)]
 
@@ -62,17 +70,21 @@ async def update_note(note_id: str, db: dependency, note_request: NoteEditReques
     await db.refresh(data)
     return {"message": f"Note with id {note_id} updated successfully", "success": True, "data": data}
 
-
-@app.delete("/notes/{note_id}", tags=["Agent-restricted"], status_code=status.HTTP_200_OK)
-async def delete_note(note_id: str, db: dependency):
+@app.put("/notes/{note_id}", tags=["Agent-Safe"], status_code=status.HTTP_200_OK)
+async def update_note(note_id: str, db: dependency, note_request: NoteEditRequest):
     note = await db.execute(select(Note).where(Note.id == note_id))
-    data = note.scalar_one_or_none()  # not awaited; `detail` not `details`
+    data = note.scalar_one_or_none()
     if data is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No note found with id {note_id}")
+        raise HTTPException(status_code=404, detail=f"No note found with id {note_id}")
 
-    await db.delete(data)
+    update_data = note_request.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(data, field, value)
+
     await db.commit()
-    return {"message": f"Note with id {note_id} deleted successfully", "success": True, "data": data}
+    await db.refresh(data)
+    return {"message": f"Note with id {note_id} updated successfully", "success": True, "data": data}
+
 
 @app.get("/search",status_code=status.HTTP_200_OK,tags=["Agent-Safe"])
 async def search_notes(query:str,db:dependency):
@@ -80,11 +92,11 @@ async def search_notes(query:str,db:dependency):
     data = notes.scalars().all()
     if not data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No notes found")
-    filtered_notes=[note for note in data if query.lower() in note.title.lower() or query.lower() in note.description.lower() or query.lower() in [tag.lower() for tag in note.tags]]
+    filtered_notes=[note for note in data if query.lower() in note.title.lower() or query.lower() in note.description.lower() or query.lower()or query.lower() in note.author.lower()  in [tag.lower() for tag in note.tags]]
     if not filtered_notes:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No notes found matching the query '{query}'")
     return {"message": f"Notes matching the query '{query}' fetched successfully", "success": True, "data": filtered_notes}
 
 
-mcp = FastApiMCP(app, include_tags=["Agent-Safe"], exclude_tags=["Agent-restricted"])
+mcp = FastApiMCP(app, include_tags=["Agent-Safe"])
 mcp.mount()

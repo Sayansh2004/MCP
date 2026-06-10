@@ -12,7 +12,7 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 client = MultiServerMCPClient(
     {
         "knowledge_assistant": {
-            "url": "http://localhost:8000",
+            "url": "http://localhost:8000/mcp",
             "transport": "sse"
         }
     }
@@ -26,7 +26,7 @@ async def initialise_agent():
     tools = await client.get_tools()  
 
     system_prompt = """
-    You are a helpful personal assistant that helps users manage their notes by:
+    You are a helpful personal assistant and always greet user for the first time they interact with you. You help users manage their notes by:
     - Saving new notes
     - Retrieving existing notes
     - Updating existing notes
